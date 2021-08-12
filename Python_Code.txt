@@ -1,0 +1,227 @@
+GETTING HELP:
+help(df.dtypes)
+help
+
+
+
+
+BASIC DATA MANIPULATION
+
+
+See structure of data:    df.dtypes
+
+See structure of data, including N missing etc: Df.info()
+
+## show more rows and columns
+pd.set_option('display.max_columns', 300)
+pd.set_option('display.max_rows', 300)
+
+From <https://cdsw.corp.alldata.net/a803721/commenity-flash-card-spend/preview/Code/00_Initial.py> 
+
+
+
+Drop several columns: 
+df2 = df.train_valid_pd.drop(['ON_US_TRANS_6M_Adj', 'ON_US_TRANS_12M_Adj'], axis=1)
+
+Flag for > 0:  
+df2['on_us_sales_3m_Adj_flag']=np.where(df2['on_us_sales_3m_Adj']>0,1,0)
+
+#####################################################
+#try to convert Nan or None to zero first - worked
+#####################################################
+df_merged3 = df_merged3.fillna(0)
+df_merged3.dtypes
+
+######################################
+#convert object to float - worked
+######################################
+df_merged3["total_spend_retail"] = df_merged3.total_spend_retail.astype(float)
+df_merged3["total_spend_online"] = df_merged3.total_spend_online.astype(float)
+df_merged3.dtypes
+
+
+################################################################
+# convert my dep var from category to zero/one
+# this creates a small dataset just with this variable (profile_var)
+# will need to concatenate to the old dataset
+# fyi the variables are 1x-buyer (1,0) and 2x-or-more (1/0)
+################################################################
+dummy_dv = pd.get_dummies(df_merged3['profile_var'])
+dummy_dv.head()
+#syntax: df = pd.concat([df, dummy], axis=1)
+df_merged3 = pd.concat([df_merged3, dummy_dv], axis=1)
+##################################################################
+# rename 1x-buyer and 2x-buyer because it seems to be problematic
+##################################################################
+df_merged3.rename(columns = {"1x-buyer": "OneTimeBuyerFlag"}, inplace=True)
+df_merged3.rename(columns = {"2x-or-more": "TwoOrMoreTimeBuyerFlag"}, inplace=True)
+df_merged3.dtypes
+
+######################################################################
+# flag for each method of payment (MOP) where 1=used that pymt type
+######################################################################
+df_merged3['mop_Visa_flag']=np.where(df_merged3['mop_Visa_cnt']>0,1,0)
+
+
+##########################################################################
+# recode payment methods into larger categories 
+# this is clunky - keep researching to find more elegant/simpler way
+##########################################################################
+# all credit cards (VISA, MC, DISC, AMEX)
+sum_column = df_merged3["mop_Visa_cnt"] + df_merged3["mop_Discover_cnt"] + df_merged3['mop_MC_cnt'] + df_merged3['mop_AMEX_cnt'] 
+df_merged3["mop_CC_cnt"] = sum_column
+df_merged3['mop_CC_flag']=np.where(df_merged3['mop_CC_cnt']>0,1,0)
+
+
+
+
+DESCRIPTIVE INFO (MEAN, MIN, MAX, STD, PCTILES, etc.)
+
+df.describe()
+
+See structure of data:    df.dtypes
+
+See structure of data, including N missing etc: Df.info()
+
+
+VISUALS / DATA EXPLORATION
+
+
+Histogram: 
+plt.hist(train_valid_pd['mob'])
+
+Boxplot: 
+plt.boxplot(train_valid_pd['ON_US_TRANS_6M_Adj'])
+
+
+
+FREQUENCIES 
+
+
+#get a proportion for the frequecy (a percentage for on_us_sales_3m_Adj)
+#99% of my sample are zeros
+tab = pd.crosstab(index=train_valid_pd['on_us_sales_3m_Adj'], columns='count')
+### frequencies - option two 
+df.groupby(['off_us_sales_3m']).size().reset_index(name='counts')
+
+Freq of dv by a class:
+n = titanic.groupby('class')[['survived']].sum()
+
+
+
+
+Covert to a pandas dataframe from spark df
+###################################
+#convert to pandas dataframe;
+###################################
+df_merged3 = df_merged2.toPandas()
+
+
+
+
+
+
+CLIPPING - NEED TO EXAMINE IN MORE DETAIL
+##########################################
+# attempt at clipping from stack overflow
+# seems to work - examine this later
+##########################################
+for col in df2.columns:
+    percentiles = df[col].quantile([0.01, 0.99]).values
+    df[col][df[col] <= percentiles[0]] = percentiles[0]
+    df[col][df[col] >= percentiles[1]] = percentiles[1]
+#or use numpy.clip:
+import numpy as np
+for col in df.columns:
+    percentiles = df[col].quantile([0.01, 0.99]).values
+    df[col] = np.clip(df[col], percentiles[0], percentiles[1])
+
+
+
+
+SCATTERPLOT MATRIX / CORRELATION MATRIX HEATMAP
+
+##################################################
+## Scatterplot matrix 
+##################################################
+#import seaborn as sns
+sns.set_theme(style="ticks")
+#df= does not work but can use next stmt (pairplot)
+df4 = sns.load_dataset("train_valid_pd")
+sns.pairplot(df)
+################################################
+## Compute the correlation matrix with heatmap
+################################################
+from string import ascii_letters
+#dataframe (df) reference here
+corr = df.corr()
+sns.set_theme(style="white")
+# Generate a mask for the upper triangle
+mask = np.triu(np.ones_like(corr, dtype=bool))
+# Set up the matplotlib figure
+f, ax = plt.subplots(figsize=(11, 9))
+# Generate a custom diverging colormap
+cmap = sns.diverging_palette(230, 20, as_cmap=True)
+# Draw the heatmap with the mask and correct aspect ratio
+sns.heatmap(corr, mask=mask, cmap=cmap, vmax=.3, center=0,
+            square=True, linewidths=.5, cbar_kws={"shrink": .5})
+
+Alternative code for heatmap (different colors, etc.)
+
+
+
+Feature Importance plot for XGBoost:
+from xgboost import plot_importance	
+	import matplotlib.pyplot as plt
+	# plot feature importance
+	plot_importance(model)
+	pyplot.show()
+
+From <https://www.aitimejournal.com/@jonathan.hirko/intro-to-classification-and-feature-selection-with-xgboost> 
+
+
+Automated feature selection XGBoost (logistic) Model
+#adapted from https://machinelearningmastery.com/feature-importance-and-feature-selection-with-xgboost-in-python/	
+	from numpy import sort
+	from sklearn.feature_selection import SelectFromModel
+	thresholds = sort(model.feature_importances_)
+	for thresh in thresholds:
+	# select features using threshold
+	selection = SelectFromModel(model, threshold=thresh, prefit=True)
+	select_X_train = selection.transform(X_train)
+	# train model
+	selection_model = XGBClassifier()
+	selection_model.fit(select_X_train, y_train)
+	# eval model
+	select_X_test = selection.transform(X_test)
+	y_pred = selection_model.predict(select_X_test)
+	predictions = [round(value) for value in y_pred]
+	accuracy = accuracy_score(y_test, predictions)
+	print("Thresh=%.3f, n=%d, Accuracy: %.2f%%" % (thresh, select_X_train.shape[1], accuracy*100.0))
+
+From <https://www.aitimejournal.com/@jonathan.hirko/intro-to-classification-and-feature-selection-with-xgboost> 
+
+
+
+
+VIOLIN PLOTS
+
+##########################################
+# violin plots -- works
+on_us_sales_3m_Adj = df2.on_us_sales_3m_Adj
+on_us_trip_3m_Adj = df2.on_us_trip_3m_Adj
+ON_US_TRANS_3M_Adj = df2.ON_US_TRANS_3M_Adj
+late_fee_credit_amt_3m_Adj = df2.late_fee_credit_amt_3m_Adj
+fin_chrg_credit_amt_3m_Adj = df2.fin_chrg_credit_amt_3m_Adj
+pay_num_total_3m_Adj = df2.pay_num_total_3m_Adj
+pay_amt_total_3m_Adj = df2.pay_amt_total_3m_Adj
+dlp_on_us = df2.dlp_on_us
+sns.violinplot(x="mob", data = df3)
+
+plt.show()
+
+#### to label the axes/title
+ax.set_title("Life Expectancy By Country")
+ax.set_ylabel("Gapminder Life Expectancy")
+ax.set_xlabel("Nations")
+plt.show()
