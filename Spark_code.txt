@@ -1,0 +1,231 @@
+#free spark book
+#ch 3 for creating a schema
+#ch 3 (pp. 63-) for adding, dropping, renaming cols
+#see Chaps. 4&5 for more on data frames (queries, p. 88)
+#see parts of CH. 7 for joins
+#see CH10 for saving models (pp. 306-), hyperparameter tuning (p. 307-), Mllib () 
+#see Ch. 11 for Mlflow
+#see Ch. 11, p.306 for saving and loading models 
+#see Ch. 11 for Koalas (similar to pandas but distributed), p. 340-
+#see Ch. 12, p. 345 - Adaptive Query Execution
+
+
+https://pages.databricks.com/rs/094-YMS-629/images/LearningSpark2.0.pdf
+
+
+
+#good source for spark stuff (syntax)
+
+https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.sql.DataFrame.drop.html
+
+
+
+#write a spark df to the sandbox
+#NOTE: Change "df_Obs_Perf" to the name of your spark dataframe
+#NOTE: And change "/Models/ExpectedSpend/ProductLevelCBCC/Comenity_Spend" to your desired path on the sandbox
+storage_container_name = "sandbox"
+storage_account = "dls2adseus2dstkprd01"
+
+base_adls_path = f"abfss://{storage_container_name}@{storage_account}.dfs.core.windows.net/Marketing/Models/ExpectedSpend/ProductLevelCBCC/Comenity_Spend/"
+### change delta to csv, parquet, etc.
+df_Obs_Perf.write.format("delta").mode("overwrite").save(base_adls_path)
+
+#path must be empty
+
+
+
+
+check this website: https://sparkbyexamples.com/spark/spark-change-dataframe-column-type/
+
+
+#the following is for a pandas dataframe
+#conversion of data
+#set the following to float    
+x_ref['TOTAL_SPEND_LTD']=x_ref['TOTAL_SPEND_LTD'].astype(float)
+x_ref['ONUS_SPEND_LTD']=x_ref['ONUS_SPEND_LTD'].astype(float)
+x_ref['GP_SPEND_LTD']=x_ref['GP_SPEND_LTD'].astype(float)
+x_ref['MOB']=x_ref['MOB'].astype(float)
+x_ref['SelectionProb']=x_ref['SelectionProb'].astype(float)
+x_ref['SamplingWeight']=x_ref['SamplingWeight'].astype(float)
+#the following have a format of 'YYYY-MM-DD' - set to string
+x_ref['new_card_open_date']=x_ref['new_card_open_date'].astype(str)
+x_ref['new_DATE_OPEN_ORIGINAL']=x_ref['new_DATE_OPEN_ORIGINAL'].astype(str)
+x_ref['new_MAX_TRAN_DATE']=x_ref['new_MAX_TRAN_DATE'].astype(str)
+x_ref['new_MIN_TRAN_DATE']=x_ref['new_MIN_TRAN_DATE'].astype(str)
+x_ref['new_MT_Date']=x_ref['new_MT_Date'].astype(str)
+x_ref.dtypes   
+spark.createDataFrame(x_ref)
+df_schema = StructType([
+  StructField("profile_var", StringType(), True),
+  StructField("ACCT_ID", StringType(), True), 
+  StructField("DIV_NO", StringType(), True),
+  StructField("OPEN_ACCT_STATUS", StringType(), True),
+  StructField("TOTAL_TRANS_LTD", IntegerType(), True),
+  StructField("ACTIVE_FLAG_LTD", IntegerType(), True),
+  StructField("TOTAL_SPEND_LTD", FloatType(), True),
+  StructField("ONUS_ACTIVE_LTD", IntegerType(), True),
+  StructField("ONUS_TRANS_LTD", IntegerType(), True),
+  StructField("ONUS_SPEND_LTD", FloatType(), True),
+  StructField("GP_ACTIVE_LTD", IntegerType(), True),
+  StructField("GP_TRANS_LTD", IntegerType(), True),
+  StructField("GP_SPEND_LTD", FloatType(), True),
+  StructField("OneX_Buyer_Flag", StringType(), True),
+  StructField("type_flag", StringType(), True),
+  StructField("MOB", FloatType(), True),  
+  StructField("DLP", IntegerType(), True),  
+  StructField("SelectionProb", FloatType(), True),
+  StructField("SamplingWeight", FloatType(), True),
+  StructField("new_card_open_date", StringType(), True),
+  StructField("new_DATE_OPEN_ORIGINAL", StringType(), True),
+  StructField("new_MAX_TRAN_DATE", StringType(), True),
+  StructField("new_MIN_TRAN_DATE", StringType(), True),
+  StructField("new_MT_Date", StringType(), True)])
+    
+# IntegerType: Represents 4-byte signed integer numbers. The range of numbers is from -2147483648 to 2147483647. 
+# LongType: Represents 8-byte signed integer numbers. The range of numbers is from -9223372036854775808 to 9223372036854775807
+MM_Ulta_Profile = spark.createDataFrame(x_ref,schema=df_schema)
+
+From <https://cdsw.corp.alldata.net/a803721/ulta-profile-get-mtl-data/preview/1_Sandbox_load.py> 
+
+
+
+
+
+#is data loaded to edh?
+#find out if data is loaded or not
+Test = spark.sql(f'''
+select snapshot_id,count(*) as volumes
+from profit_nz_udb01.fe_table_cobrand_sales
+where snapshot_id > 201912
+group by 1
+order by 1
+''')
+
+Test.show()
+
+
+
+
+
+## Save DF to sandbox - Chao Xu
+df_modeling.createOrReplaceTempView("df_modeling")
+spark.sql(f"""
+drop table if exists sandbox.exp_sc_train
+""")
+spark.sql(f"""
+create table sandbox.exp_sc_train
+select *
+from df_modeling
+""")
+
+
+### retreive data frames from sandbox
+## Retrieve dataframes - Chao Xu
+df_modeling = spark.sql("""
+select *
+from sandbox.exp_sc_train
+""")
+cache_now(df_modeling)
+shape(df_modeling)
+df_oot = spark.sql("""
+select *
+from sandbox.exp_sc_oot
+""")
+cache_now(df_oot)
+shape(df_oot)
+
+
+
+
+
+# spark dataframe capping variables
+def spark_cap(df, excludeCols=[], quantiles=[0.01, 0.99], relativeErr=0.001):
+numTypes = ('int', 'double', 'long', 'float', 'decimal', 'numeric')
+excludeCols = [x.upper() for x in excludeCols]
+capCols = [x[0] for x in df.dtypes if x[1] in numTypes and x[0].upper() not in excludeCols]
+qts = df.approxQuantile(capCols, quantiles, relativeErr)
+for i in range(0, len(qts)):
+col = capCols[i]
+low = qts[i][0]
+upp = qts[i][1]
+typ = df.dtypes[[a[0] for a in df.dtypes].index(col)][1]
+df = df.withColumn(col, when(df[col] > upp, upp)
+.when(df[col] < low, low)
+.otherwise(df[col])
+.cast(typ))
+return df 
+ex_cols = ['acct_id', 'write_off_date', 'risk_score', 'credit_limit','y_off_cycle', 'closed_acct']
+df3 = spark_cap(df2, ex_cols)
+cache_now(df3)
+
+
+#frequencies (proc freq equivalent)
+# mimic proc freq
+# adding sorting 09/08/2020
+def proc_freq(df, var):
+    _t1 = df.groupby(var).count().withColumnRenamed('count', 'freq')
+    _t1.withColumn('pct', concat(F.round(_t1.freq/df.count() * 100, 2), lit('%'))) \
+     .withColumn('freq', format_number(_t1.freq, 0)) \
+     .sort(var) \
+     .show()
+
+
+# check miss
+## added 'smallint' and 'bigint' 09/08/2020
+def spark_check_miss(df):  
+    N = df.count()
+cols = [F.sum(col(c).isNull().cast("int")).alias(c) for c in df.columns]
+    df_miss = df.select(cols).toPandas().set_index(pd.Index(['n_miss']))    
+    cols = [F.sum((col(nm) == 0).cast('int')).cast('int').alias(nm) for nm,tp in df.dtypes
+          if any(num_tp in tp for num_tp in ['int', 'double', 'long', 'float', 'decimal', 'numeric'])]  
+    df_zero = df.select(cols).toPandas().set_index(pd.Index(['n_zero']))
+    df_out = pd.concat([df_miss, df_zero], sort=False).T
+df_out['n_zero'] = [x if x >= 0 else -1 for x in df_out['n_zero']]
+    df_out = df_out.astype('int', errors='ignore')
+    df_out['miss_rate'] = (df_out['n_miss'] / N).map("{:.1%}".format)
+    df_out['zero_rate'] = (df_out['n_zero'] / N).map("{:.1%}".format)
+    return df_out
+
+
+# gain chart
+def spark_gain_chart(df, col_score, col_y, n_bins=10, show=True):
+    from pyspark.ml.feature import QuantileDiscretizer
+    qds = QuantileDiscretizer(
+    numBuckets=n_bins, inputCol=col_score, outputCol=f'{col_score}_bin', 
+    relativeError=0.00001, handleInvalid='keep')
+    df_bin = qds.fit(df).transform(df)  
+    df_evl = df_bin.groupBy(f'{col_score}_bin').agg(
+    expr(f'round(avg({col_y}), 2) as avg_{col_y}')).toPandas()
+    avg_y = df_evl[f'avg_{col_y}'].mean()
+    df_evl['lift'] = df_evl[f'avg_{col_y}'] / avg_y
+    df_evl = df_evl.sort_values(f'{col_score}_bin', ascending=False) \
+    .reset_index(drop=True)
+    df_evl['gain'] = [np.round(a, 2) for a in df_evl['lift'].cumsum() / [x+1 for x in df_evl.index]]
+    return df_evl
+
+
+def profiling(trues,preds,num_ranks=20):
+    """
+    This function is to calculate the statistics for each rank.
+    """
+    import pandas as pd
+    import numpy as np
+    ## Combine actual and pred_hat
+    combined=pd.DataFrame({'Pred_Hat':preds,'Actual':trues})
+    # Ranking and Summarizing
+    combined['Rank'] = pd.qcut(combined['Pred_Hat'].rank(method='first'), num_ranks, labels=range(num_ranks,0,-1))
+    combinedSum = combined[['Rank','Pred_Hat','Actual']].groupby(['Rank']).mean()
+    combinedCount = combined[['Rank','Actual']].groupby(['Rank']).count()
+    combinedCount.columns = ['Counts']
+    combinedSum = combinedCount.merge(combinedSum,on=['Rank']).sort_index(ascending=False)
+    combinedSum.index = combinedSum.index.astype('object')
+    totalSum = pd.DataFrame([[len(trues), np.mean(preds),np.mean(trues)]],columns=['Counts','Pred_Hat','Actual'],index=['Total'])
+    combinedSum = combinedSum.append(totalSum)
+    combinedSum.index.name = 'Rank'
+#    from sklearn.metrics import mean_squared_error,mean_absolute_error
+#    RMSE = np.sqrt(mean_squared_error(combined['Actual'], combined['Pred_Hat']))
+#    MAE = mean_absolute_error(combined['Actual'], combined['Pred_Hat'])
+#    print("RMSE:",round(RMSE,6))
+#    print("MAE:",round(MAE,6))
+    print(combinedSum)
+    return combinedSum
